@@ -1,0 +1,1 @@
+This device sits transparently between a POS system and a thermal receipt printer. It intercepts receipt data in real time, prints it physically via Bluetooth, and simultaneously logs it to Google Sheets in the cloud. Zero changes are needed on the POS side.
