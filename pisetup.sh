@@ -117,3 +117,101 @@ done
 echo "Warning: Could not bind rfcomm0"
 Make executable:
 chmod +x /home/rpi/bt_setup.sh
+
+12) Receipt Receiver Daemon
+File location: /home/rpi/receipt-sniffer/receiver.py
+Create directory first: mkdir -p /home/rpi/receipt-sniffer
+Then: nano /home/rpi/receipt-sniffer/receiver.py
+
+13) Systemd Service
+File location: /etc/systemd/system/receipt-bridge.service
+Create with: sudo nano /etc/systemd/system/receipt-bridge.service
+[Unit]
+Description=Receipt Sniffer Bridge
+After=bluetooth.target
+Wants=bluetooth.target
+ 
+[Service]
+Type=simple
+User=rpi
+ExecStartPre=/home/rpi/bt_setup.sh
+ExecStart=/usr/bin/python3 /home/rpi/receipt-sniffer/receiver.py
+Restart=always
+RestartSec=10
+ 
+[Install]
+WantedBy=multi-user.target
+Enable and start:
+
+sudo systemctl daemon-reload
+sudo systemctl enable receipt-bridge
+sudo systemctl start receipt-bridge
+sudo systemctl status receipt-bridge
+✓ Should show: active (running)
+
+14) Google Sheets Cloud Setup
+14.1 Create the Sheet
+•	Go to sheets.google.com
+•	Create new sheet, name it Receipts
+•	Note the Sheet ID from the URL: docs.google.com/spreadsheets/d/THIS_PART/edit
+
+14.2 Deploy Apps Script Webhook
+•	In your sheet: Extensions → Apps Script
+•	Delete existing code, paste the script below
+•	Save (give project any name)
+•	Deploy → New Deployment → Type: Web app
+•	Execute as: Me  |  Who has access: Anyone
+•	Click Deploy → copy the Web app URL ending in /exec
+
+Apps Script code to paste:
+function doPost(e) {
+  var sheet = SpreadsheetApp.getActiveSpreadsheet().getActiveSheet();
+  var data = JSON.parse(e.postData.contents);
+ 
+  if (sheet.getLastRow() === 0) {
+    sheet.appendRow(["Timestamp", "Filename", "Receipt Data", "Size"]);
+  }
+ 
+  sheet.appendRow([
+    new Date(),
+    data.filename,
+    data.data,
+    data.data.length
+  ]);
+ 
+  return ContentService
+    .createTextOutput(JSON.stringify({"status": "ok"}))
+    .setMimeType(ContentService.MimeType.JSON);
+}
+
+14.3 Test the Webhook
+Run this on the Pi to confirm Google Sheets is receiving data:
+python3 -c "
+import requests
+r = requests.post(
+    'https://script.google.com/macros/s/YOURURL/exec',
+    json={'filename': 'test.bin', 'data': 'Hello from Pi'},
+    timeout=10
+)
+print(r.status_code, r.text)"
+✓ Should return: 200  {"status": "ok"} and a new row appears in your sheet.
+
+15) Interactive Billing Script
+Save as: send_receipt_interactive.py on your Desktop
+Run with: python send_receipt_interactive.py (from Desktop folder in PowerShell)
+
+16) To Run the Billing Script
+# In PowerShell:
+cd Desktop
+python send_receipt_interactive.py
+
+17) Setup Before Presenting
+Open two PowerShell windows side by side:
+
+Window 1 — SSH + live logs (shows the audience what the Pi is doing):
+ssh rpi@192.168.137.126
+sudo journalctl -u receipt-bridge -f
+
+Window 2 — billing script:
+cd Desktop
+python send_receipt_interactive.py
